@@ -7,7 +7,7 @@ from telegram.ext import (
     ContextTypes,
     CommandHandler,
     MessageHandler,
-    filters
+    filters,
 )
 
 # Setup logging
@@ -19,13 +19,19 @@ TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))
-DEST_CHANNEL_ID = int(os.getenv("DEST_CHANNEL_ID"))
+
+# Supporto per @canale o ID numerico
+dest_channel_env = os.getenv("DEST_CHANNEL_ID")
+if dest_channel_env.startswith("@"):
+    DEST_CHANNEL_ID = dest_channel_env
+else:
+    DEST_CHANNEL_ID = int(dest_channel_env)
 
 # Initialize bot and app
 bot = Bot(token=TOKEN)
 application = ApplicationBuilder().bot(bot).build()
 
-# Handler to forward messages that contain 'rating'
+# Handler per inoltrare messaggi che contengono "rating"
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"[Messaggio ricevuto] Update: {update}")
 
@@ -44,62 +50,59 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Messaggio da chat_id={chat_id} testo={text} message_id={message_id}")
 
-    if chat_id == SOURCE_CHANNEL_ID and text:
-        # Primo test: invio messaggio di prova nel canale di destinazione
+    if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
         try:
-            logger.info(f"Invio messaggio di test nel canale {DEST_CHANNEL_ID}")
-            await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text="Messaggio di test dal bot")
+            logger.info(f"Inoltro messaggio ID {message_id} dal canale {SOURCE_CHANNEL_ID} al canale {DEST_CHANNEL_ID}")
+            await context.bot.forward_message(
+                chat_id=DEST_CHANNEL_ID,
+                from_chat_id=SOURCE_CHANNEL_ID,
+                message_id=message_id,
+            )
+            logger.info("✅ Messaggio inoltrato con successo")
         except Exception as e:
-            logger.error(f"Errore durante invio messaggio di test: {e}", exc_info=True)
+            logger.error(f"❌ Errore durante inoltro: {e}")
 
-        # Se il messaggio contiene 'rating', inoltra
-        if "rating" in text.lower():
-            try:
-                logger.info(f"Forwarding message from chat {chat_id} with message_id {message_id}")
-                await context.bot.forward_message(
-                    chat_id=DEST_CHANNEL_ID,
-                    from_chat_id=SOURCE_CHANNEL_ID,
-                    message_id=message_id
-                )
-                logger.info("Messaggio inoltrato con successo")
-            except Exception as e:
-                logger.error(f"Errore durante inoltro: {e}", exc_info=True)
-        else:
-            logger.info("Messaggio ignorato (non contiene 'rating')")
-    else:
-        logger.info("Messaggio ignorato (provenienza chat differente o testo assente)")
-
-# Start command
+# Comando /start per verifica manuale
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot avviato!")
+    await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text="✅ TEST: messaggio di prova dal comando /start")
+    await update.message.reply_text("Bot avviato! Messaggio di prova inviato al canale.")
 
-# Healthcheck endpoint (ping da UptimeRobot)
+# Healthcheck endpoint
 async def healthcheck(request):
     return web.Response(text="Bot online!", status=200)
 
-# Webhook handler
+# Webhook handler corretto
 async def handle(request):
     try:
         data = await request.json()
         logger.info(f"[Webhook ricevuto] {data}")
 
         update = Update.de_json(data, bot)
-        await application.initialize()  # Necessario per usare update_queue
-        await application.update_queue.put(update)
+
+        if not application.initialized:
+            await application.initialize()
+
+        await application.process_update(update)
         return web.Response()
     except Exception as e:
-        logger.error(f"Errore nella gestione webhook: {e}", exc_info=True)
+        logger.error(f"❌ Errore nella gestione webhook: {e}", exc_info=True)
         return web.Response(status=500)
 
-# Startup webhook setup
+# Webhook setup all'avvio
 async def on_startup(app):
     await bot.set_webhook(WEBHOOK_URL)
-    logger.info(f"Webhook impostato a {WEBHOOK_URL}")
+    logger.info(f"✅ Webhook impostato a {WEBHOOK_URL}")
 
-# Shutdown cleanup
+    # Messaggio di prova in canale destinazione
+    try:
+        await bot.send_message(chat_id=DEST_CHANNEL_ID, text="🚀 Bot avviato correttamente (test automatico)")
+    except Exception as e:
+        logger.error(f"❌ Errore invio messaggio di test: {e}")
+
+# Pulizia webhook allo shutdown
 async def on_shutdown(app):
     await bot.delete_webhook()
-    logger.info("Webhook eliminato")
+    logger.info("🛑 Webhook eliminato")
 
 # Main app
 if __name__ == "__main__":
@@ -108,10 +111,10 @@ if __name__ == "__main__":
 
     app = web.Application()
     app.router.add_post(WEBHOOK_PATH, handle)
-    app.router.add_get("/", healthcheck)  # Per UptimeRobot
+    app.router.add_get("/", healthcheck)  # Per UptimeRobot o controllo manuale
 
     app.on_startup.append(lambda app: on_startup(application))
     app.on_cleanup.append(lambda app: on_shutdown(application))
 
-    logger.info("Avvio bot con webhook")
+    logger.info("🚀 Avvio bot con webhook")
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
