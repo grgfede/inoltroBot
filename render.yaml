@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: rating-forward-bot
+    runtime: python
+    buildCommand: ""
+    startCommand: "python bot.py"
+    envVars:
+      - key: BOT_TOKEN
+        value: <IL_TUO_TOKEN_BOT>
+      - key: SOURCE_CHANNEL_ID
+        value: <ID_CANALI_A>
+      - key: TARGET_CHANNEL_ID
+        value: <ID_CANALI_B>
