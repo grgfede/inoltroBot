@@ -5,6 +5,7 @@ from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
@@ -14,32 +15,47 @@ SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))  # canale da cui leggere
 DEST_CHANNEL_ID = int(os.getenv("DEST_CHANNEL_ID"))      # canale dove inoltrare
 
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Messaggio ricevuto da chat_id={update.message.chat_id} testo={update.message.text}")
     # Controlla che il messaggio venga dal canale di origine
     if update.message and update.message.chat_id == SOURCE_CHANNEL_ID:
         text = update.message.text or ""
         if "rating" in text.lower():
-            await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text=text)
+            try:
+                await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text=text)
+                logger.info(f"Messaggio inoltrato al canale {DEST_CHANNEL_ID}")
+            except Exception as e:
+                logger.error(f"Errore durante inoltro: {e}")
+        else:
+            logger.info("Messaggio non contiene 'rating', nessun inoltro")
+    else:
+        logger.info(f"Messaggio da chat_id diverso da {SOURCE_CHANNEL_ID}, ignorato")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Comando /start ricevuto")
     await update.message.reply_text("Bot avviato!")
 
 async def on_startup(app):
     bot = app.bot
     # Imposta il webhook
     await bot.set_webhook(WEBHOOK_URL)
-    logging.info(f"Webhook impostato a {WEBHOOK_URL}")
+    logger.info(f"Webhook impostato a {WEBHOOK_URL}")
 
 async def on_shutdown(app):
     bot = app.bot
     await bot.delete_webhook()
-    logging.info("Webhook eliminato")
+    logger.info("Webhook eliminato")
 
 async def handle(request):
     """Handler aiohttp per la ricezione delle richieste webhook Telegram"""
-    data = await request.json()
-    update = Update.de_json(data, bot)
-    await application.update_queue.put(update)
-    return web.Response()
+    try:
+        data = await request.json()
+        logger.info(f"Ricevuto update webhook: {data}")
+        update = Update.de_json(data, bot)
+        await application.update_queue.put(update)
+        return web.Response()
+    except Exception as e:
+        logger.error(f"Errore nella gestione webhook: {e}")
+        return web.Response(status=500)
 
 if __name__ == "__main__":
     # Crea bot e application
@@ -58,5 +74,6 @@ if __name__ == "__main__":
     app.on_startup.append(lambda app: on_startup(application))
     app.on_cleanup.append(lambda app: on_shutdown(application))
 
+    logger.info("Avvio bot con webhook")
     # Avvia tutto
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
