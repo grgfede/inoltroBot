@@ -1,13 +1,18 @@
 services:
   - type: web
-    name: rating-forward-bot
-    runtime: python
-    buildCommand: ""
-    startCommand: "python bot.py"
+    name: telegram-bot-webhook
+    env: python
     envVars:
       - key: BOT_TOKEN
-        value: 7678705134:AAFo9La8QEvreETFNQjpA3ulBut0fj59e4Y
+        fromSecret: telegram-bot-token
       - key: SOURCE_CHANNEL_ID
-        value: -1001252470250
-      - key: TARGET_CHANNEL_ID
-        value: -1002801969309
+        value: "-1001252470250"    # metti qui l'ID del canale di origine
+      - key: DEST_CHANNEL_ID
+        value: "-1002801969309"    # metti qui l'ID del canale di destinazione
+      - key: WEBHOOK_URL
+        value: "https://inoltrobot.onrender.com"
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 bot.py
+    healthCheckPath: /
+    autoDeploy: true
