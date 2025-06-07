@@ -1,55 +1,37 @@
 import os
-import logging
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
-import asyncio
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))
-TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID"))
-PORT = int(os.getenv("PORT", "10000"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # es: https://tuo-bot.onrender.com
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # es: https://tuo-dominio.com + WEBHOOK_PATH
+PORT = int(os.getenv("PORT", "8443"))
 
-logging.basicConfig(level=logging.INFO)
+async def forward_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("✅ Ricevuto messaggio!")
+    text = update.message.text
+    # Se nel testo c'è "rating" in qualsiasi maiuscola/minuscola
+    if text and ("rating" in text.lower()):
+        # Inoltra il messaggio su canale B (ID canale da env var)
+        dest_channel_id = int(os.getenv("DEST_CHANNEL_ID"))
+        await context.bot.send_message(chat_id=dest_channel_id, text=text)
 
-async def forward_filtered(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.channel_post and update.channel_post.text:
-        text = update.channel_post.text
-        if "rating" in text.lower():
-            await context.bot.forward_message(
-                chat_id=TARGET_CHANNEL_ID,
-                from_chat_id=SOURCE_CHANNEL_ID,
-                message_id=update.channel_post.message_id
-            )
-
-async def run():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-    app.add_handler(MessageHandler(
-        filters.Chat(SOURCE_CHANNEL_ID) & filters.TEXT,
-        forward_filtered
-    ))
-
-    await app.initialize()
-    await app.bot.set_webhook(WEBHOOK_URL)
-    await app.start()
-    await app.updater.start_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path="",
-        webhook_url=WEBHOOK_URL
+async def main():
+    app = (
+        ApplicationBuilder()
+        .token(BOT_TOKEN)
+        .build()
     )
 
-    # non chiudere il loop: resta attivo
-    await asyncio.Event().wait()
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), forward_messages))
+
+    # Avvia il webhook server integrato aiohttp
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=WEBHOOK_URL + WEBHOOK_PATH,
+    )
 
 if __name__ == "__main__":
-    try:
-        asyncio.get_event_loop().run_until_complete(run())
-    except Exception as e:
-        logging.exception("Errore durante l'avvio del bot:", exc_info=e)
+    import asyncio
+    asyncio.run(main())
