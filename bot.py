@@ -33,8 +33,6 @@ application = ApplicationBuilder().bot(bot).build()
 
 # Handler per inoltrare messaggi che contengono "rating"
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"[Messaggio ricevuto] Update: {update}")
-
     text = None
     chat_id = None
     message_id = None
@@ -52,7 +50,7 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
         try:
-            logger.info(f"Inoltro messaggio ID {message_id} dal canale {SOURCE_CHANNEL_ID} al canale {DEST_CHANNEL_ID}")
+            logger.info(f"[Messaggio ricevuto] Update: {update}")
             await context.bot.forward_message(
                 chat_id=DEST_CHANNEL_ID,
                 from_chat_id=SOURCE_CHANNEL_ID,
