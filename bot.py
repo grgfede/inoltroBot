@@ -1,8 +1,15 @@
 import os
 import logging
+import asyncio
 from aiohttp import web
 from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    CommandHandler,
+    MessageHandler,
+    filters,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,12 +27,11 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = None
     chat_id = None
 
-    # Gestisce messaggi da chat o da canale
     if update.message:
-        chat_id = update.message.chat.id
+        chat_id = update.message.chat_id
         text = update.message.text or update.message.caption
     elif update.channel_post:
-        chat_id = update.channel_post.chat.id
+        chat_id = update.channel_post.chat_id
         text = update.channel_post.text or update.channel_post.caption
 
     logger.info(f"Messaggio da chat_id={chat_id} testo={text}")
@@ -46,24 +52,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Comando /start ricevuto")
     await update.message.reply_text("Bot avviato!")
 
-async def on_startup(app):
-    bot = app.bot
-    # Imposta il webhook
+async def on_startup(application):
+    bot = application.bot
     await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook impostato a {WEBHOOK_URL}")
 
-async def on_shutdown(app):
-    bot = app.bot
+async def on_shutdown(application):
+    bot = application.bot
     await bot.delete_webhook()
     logger.info("Webhook eliminato")
 
 async def handle(request):
-    """Handler aiohttp per la ricezione delle richieste webhook Telegram"""
     try:
         data = await request.json()
         logger.info(f"Ricevuto update webhook: {data}")
         update = Update.de_json(data, bot)
-        await application.process_update(update)  # <-- PROCESSA L'UPDATE SUBITO
+        await application.process_update(update)
         return web.Response()
     except Exception as e:
         logger.error(f"Errore nella gestione webhook: {e}")
@@ -73,15 +77,27 @@ if __name__ == "__main__":
     bot = Bot(token=TOKEN)
     application = ApplicationBuilder().bot(bot).build()
 
-    # Aggiungi handler: gestisce messaggi di testo sia da chat che da canale (channel_post)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
 
-    app = web.Application()
-    app.router.add_post(WEBHOOK_PATH, handle)
+    async def main():
+        await application.initialize()
+        await application.start()
 
-    app.on_startup.append(lambda app: on_startup(application))
-    app.on_cleanup.append(lambda app: on_shutdown(application))
+        app = web.Application()
+        app.router.add_post(WEBHOOK_PATH, handle)
 
-    logger.info("Avvio bot con webhook")
-    web.run_app(app, port=int(os.getenv("PORT", 8080)))
+        app.on_startup.append(lambda app: on_startup(application))
+        app.on_cleanup.append(lambda app: on_shutdown(application))
+
+        logger.info("Avvio bot con webhook")
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8080)))
+        await site.start()
+
+        # loop infinito per tenere in vita il server
+        while True:
+            await asyncio.sleep(3600)
+
+    asyncio.run(main())
