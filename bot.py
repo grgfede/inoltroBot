@@ -15,10 +15,12 @@ SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))  # canale da cui leggere
 DEST_CHANNEL_ID = int(os.getenv("DEST_CHANNEL_ID"))      # canale dove inoltrare
 
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Messaggio ricevuto da chat_id={update.message.chat_id} testo={update.message.text}")
-    # Controlla che il messaggio venga dal canale di origine
-    if update.message and update.message.chat_id == SOURCE_CHANNEL_ID:
-        text = update.message.text or ""
+    # Usare channel_post per messaggi canale
+    post = update.channel_post
+    if post and post.chat_id == SOURCE_CHANNEL_ID:
+        text = post.text or post.caption or ""
+        logger.info(f"Messaggio ricevuto da canale_id={post.chat_id} testo={text}")
+
         if "rating" in text.lower():
             try:
                 await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text=text)
@@ -28,7 +30,7 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.info("Messaggio non contiene 'rating', nessun inoltro")
     else:
-        logger.info(f"Messaggio da chat_id diverso da {SOURCE_CHANNEL_ID}, ignorato")
+        logger.info(f"Messaggio non da canale {SOURCE_CHANNEL_ID}, ignorato")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Comando /start ricevuto")
@@ -62,9 +64,10 @@ if __name__ == "__main__":
     bot = Bot(token=TOKEN)
     application = ApplicationBuilder().bot(bot).build()
 
-    # Aggiungi handler
+    # Aggiungi handler:
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & filters.Chat(chat_id=SOURCE_CHANNEL_ID), forward_if_rating))
+    # Nota: usa filters.Chat e filters.ALL perché il messaggio vero arriva come channel_post
+    application.add_handler(MessageHandler(filters.ALL & filters.Chat(chat_id=SOURCE_CHANNEL_ID), forward_if_rating))
 
     # Server aiohttp per ricevere webhook
     app = web.Application()
