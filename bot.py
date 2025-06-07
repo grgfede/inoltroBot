@@ -44,19 +44,30 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"Messaggio da chat_id={chat_id} testo={text} message_id={message_id}")
 
-    if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
+    if chat_id == SOURCE_CHANNEL_ID and text:
+        # Primo test: invio messaggio di prova nel canale di destinazione
         try:
-            logger.info(f"Inoltro messaggio ID {message_id} dal canale {SOURCE_CHANNEL_ID} al canale {DEST_CHANNEL_ID}")
-            await context.bot.forward_message(
-                chat_id=DEST_CHANNEL_ID,
-                from_chat_id=SOURCE_CHANNEL_ID,
-                message_id=message_id
-            )
-            logger.info(f"Messaggio inoltrato con successo")
+            logger.info(f"Invio messaggio di test nel canale {DEST_CHANNEL_ID}")
+            await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text="Messaggio di test dal bot")
         except Exception as e:
-            logger.error(f"Errore durante inoltro: {e}")
+            logger.error(f"Errore durante invio messaggio di test: {e}", exc_info=True)
+
+        # Se il messaggio contiene 'rating', inoltra
+        if "rating" in text.lower():
+            try:
+                logger.info(f"Forwarding message from chat {chat_id} with message_id {message_id}")
+                await context.bot.forward_message(
+                    chat_id=DEST_CHANNEL_ID,
+                    from_chat_id=SOURCE_CHANNEL_ID,
+                    message_id=message_id
+                )
+                logger.info("Messaggio inoltrato con successo")
+            except Exception as e:
+                logger.error(f"Errore durante inoltro: {e}", exc_info=True)
+        else:
+            logger.info("Messaggio ignorato (non contiene 'rating')")
     else:
-        logger.info("Messaggio ignorato (non contiene 'rating' o proviene da altra chat)")
+        logger.info("Messaggio ignorato (provenienza chat differente o testo assente)")
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,7 +88,7 @@ async def handle(request):
         await application.update_queue.put(update)
         return web.Response()
     except Exception as e:
-        logger.error(f"Errore nella gestione webhook: {e}")
+        logger.error(f"Errore nella gestione webhook: {e}", exc_info=True)
         return web.Response(status=500)
 
 # Startup webhook setup
