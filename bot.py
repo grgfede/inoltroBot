@@ -22,10 +22,10 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Gestisce messaggi da chat o da canale
     if update.message:
-        chat_id = update.message.chat_id
+        chat_id = update.message.chat.id
         text = update.message.text or update.message.caption
     elif update.channel_post:
-        chat_id = update.channel_post.chat_id
+        chat_id = update.channel_post.chat.id
         text = update.channel_post.text or update.channel_post.caption
 
     logger.info(f"Messaggio da chat_id={chat_id} testo={text}")
@@ -63,7 +63,7 @@ async def handle(request):
         data = await request.json()
         logger.info(f"Ricevuto update webhook: {data}")
         update = Update.de_json(data, bot)
-        await application.update_queue.put(update)
+        await application.process_update(update)  # <-- PROCESSA L'UPDATE SUBITO
         return web.Response()
     except Exception as e:
         logger.error(f"Errore nella gestione webhook: {e}")
