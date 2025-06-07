@@ -33,19 +33,14 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if chat_id == SOURCE_CHANNEL_ID and text:
         if "rating" in text.lower():
             try:
-                await context.bot.copy_message(
+                await context.bot.forward_message(
                     chat_id=DEST_CHANNEL_ID,
                     from_chat_id=chat_id,
                     message_id=message_id
                 )
-                logger.info(f"Messaggio copiato con successo dal canale {chat_id} a {DEST_CHANNEL_ID}")
+                logger.info(f"Messaggio inoltrato dal canale {chat_id} al canale {DEST_CHANNEL_ID}")
             except Exception as e:
-                logger.error(f"Errore copy_message, invio solo testo: {e}")
-                try:
-                    await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text=text)
-                    logger.info(f"Messaggio di solo testo inviato al canale {DEST_CHANNEL_ID}")
-                except Exception as e2:
-                    logger.error(f"Errore anche nell'invio testo: {e2}")
+                logger.error(f"Errore durante l'inoltro del messaggio: {e}")
         else:
             logger.info("Messaggio non contiene 'rating', nessun inoltro")
     else:
@@ -57,6 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def on_startup(app):
     bot = app.bot
+    # Imposta il webhook
     await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook impostato a {WEBHOOK_URL}")
 
@@ -66,6 +62,7 @@ async def on_shutdown(app):
     logger.info("Webhook eliminato")
 
 async def handle(request):
+    """Handler aiohttp per la ricezione delle richieste webhook Telegram"""
     try:
         data = await request.json()
         logger.info(f"Ricevuto update webhook: {data}")
@@ -80,6 +77,7 @@ if __name__ == "__main__":
     bot = Bot(token=TOKEN)
     application = ApplicationBuilder().bot(bot).build()
 
+    # Aggiungi handler: gestisce comandi e messaggi (chat e canale)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
 
@@ -89,5 +87,5 @@ if __name__ == "__main__":
     app.on_startup.append(lambda app: on_startup(application))
     app.on_cleanup.append(lambda app: on_shutdown(application))
 
-    logger.info(f"Avvio bot con webhook su {WEBHOOK_PATH}")
+    logger.info("Avvio bot con webhook")
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
