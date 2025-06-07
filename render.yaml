@@ -6,8 +6,8 @@ services:
     startCommand: "python bot.py"
     envVars:
       - key: BOT_TOKEN
-        value: <IL_TUO_TOKEN_BOT>
+        value: 7678705134:AAFo9La8QEvreETFNQjpA3ulBut0fj59e4Y
       - key: SOURCE_CHANNEL_ID
-        value: <ID_CANALI_A>
+        value: -1001252470250
       - key: TARGET_CHANNEL_ID
-        value: <ID_CANALI_B>
+        value: -1002801969309
