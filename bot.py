@@ -31,20 +31,30 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = None
     chat_id = None
+    message_id = None
 
     if update.message:
         chat_id = update.message.chat_id
         text = update.message.text or update.message.caption
+        message_id = update.message.message_id
     elif update.channel_post:
         chat_id = update.channel_post.chat_id
         text = update.channel_post.text or update.channel_post.caption
+        message_id = update.channel_post.message_id
 
     logger.info(f"Messaggio da chat_id={chat_id} testo={text}")
 
     if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
         try:
-            await context.bot.forward_message(chat_id=DEST_CHANNEL_ID, from_chat_id=SOURCE_CHANNEL_ID, message_id=update.channel_post.message_id)
-            logger.info(f"Messaggio inoltrato al canale {DEST_CHANNEL_ID}")
+            if message_id:
+                await context.bot.forward_message(
+                    chat_id=DEST_CHANNEL_ID,
+                    from_chat_id=SOURCE_CHANNEL_ID,
+                    message_id=message_id
+                )
+                logger.info(f"Messaggio inoltrato al canale {DEST_CHANNEL_ID}")
+            else:
+                logger.warning("Nessun message_id trovato per inoltro")
         except Exception as e:
             logger.error(f"Errore durante inoltro: {e}")
     else:
@@ -65,7 +75,7 @@ async def handle(request):
         logger.info(f"[Webhook ricevuto] {data}")
 
         update = Update.de_json(data, bot)
-        await application.initialize()  # Necessario per usare update_queue
+        await application.initialize()
         await application.update_queue.put(update)
         return web.Response()
     except Exception as e:
