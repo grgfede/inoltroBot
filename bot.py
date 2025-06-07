@@ -18,35 +18,31 @@ bot = Bot(token=TOKEN)
 application = ApplicationBuilder().bot(bot).build()
 
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Update ricevuto: {update}")
-
     message = update.message or update.channel_post
     if not message:
-        logger.info("Nessun messaggio presente nell'update")
         return
 
     chat_id = message.chat_id
     text = message.text or message.caption
 
-    logger.info(f"Messaggio ricevuto da chat_id={chat_id}, testo={text}")
-
     if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
         try:
             await bot.forward_message(
                 chat_id=DEST_CHANNEL_ID,
-                from_chat_id=SOURCE_CHANNEL_ID,
+                from_chat_id=chat_id,
                 message_id=message.message_id
             )
-            logger.info("Messaggio inoltrato con successo")
+            logger.info("Messaggio inoltrato")
         except Exception as e:
             logger.error(f"Errore inoltro: {e}")
     else:
-        logger.info("Condizioni non soddisfatte per inoltro")
+        logger.info("Messaggio ignorato")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot attivo!")
 
 async def on_startup(app):
+    await application.initialize()  # ⚠️ IMPORTANTE!
     await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook impostato a {WEBHOOK_URL}")
 
@@ -64,15 +60,15 @@ async def handle(request):
         logger.error(f"Errore nel webhook handler: {e}")
         return web.Response(status=500)
 
-# Aggiungi handler
+# Handlers
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
 
-# App AIOHTTP
+# Web server
 app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle)
-app.on_startup.append(lambda app: on_startup(application))
-app.on_cleanup.append(lambda app: on_shutdown(application))
+app.on_startup.append(on_startup)
+app.on_cleanup.append(on_shutdown)
 
 if __name__ == "__main__":
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
