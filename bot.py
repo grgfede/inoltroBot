@@ -79,14 +79,14 @@ async def handle(request):
 
         update = Update.de_json(data, bot)
 
-        if not application.initialized:
-            await application.initialize()
-
+        await application.initialize()
         await application.process_update(update)
+
         return web.Response()
     except Exception as e:
         logger.error(f"❌ Errore nella gestione webhook: {e}", exc_info=True)
         return web.Response(status=500)
+
 
 # Webhook setup all'avvio
 async def on_startup(app):
