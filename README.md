@@ -63,12 +63,17 @@ Ora è necessario configurare le impostazioni del server:
 - privati → usa `-100<channel_id>`, puoi ottenerlo inoltrando un messaggio del canale al bot [@userinfobot](https://telegram.me/userinfobot).
 
 ## 🔗 Imposta il WebHook (una tantum)
-Ogni volta che il server viene avviato, bisogna settare il webHook tramite la cURL **SetWebHook**:
+Ogni volta che il server viene avviato, bisogna settare il webHook tramite la cURL:
 
     curl -F "url=https://<your-domain>.onrender.com/webhook/<BOT_TOKEN>" \
     "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook"
 
-Per verificare se la WebHook è stata settata, lanciare la cURL **CheckWebHook** la quale risponderà:
+Per verificare se la WebHook è stata settata, lanciare la cURL
+
+    curl --location 'https://api.telegram.org/bot<BOT_TOKEN>/setWebhook' \
+    --form 'url="https://inoltrobot.onrender.com/webhook/7<BOT_TOKEN>"'
+
+ la quale risponderà:
 
     {
 	    "ok":  true,
