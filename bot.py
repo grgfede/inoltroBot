@@ -2,73 +2,97 @@ import os
 import logging
 from aiohttp import web
 from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    ContextTypes,
+    CommandHandler,
+    MessageHandler,
+    filters
+)
 
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Environment variables
 TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL") + WEBHOOK_PATH
-
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))
 DEST_CHANNEL_ID = int(os.getenv("DEST_CHANNEL_ID"))
 
+# Initialize bot and app
 bot = Bot(token=TOKEN)
 application = ApplicationBuilder().bot(bot).build()
 
+# Handler to forward messages that contain 'rating'
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message or update.channel_post
-    if not message:
-        return
+    logger.info(f"[Messaggio ricevuto] Update: {update}")
 
-    chat_id = message.chat_id
-    text = message.text or message.caption
+    text = None
+    chat_id = None
+
+    if update.message:
+        chat_id = update.message.chat_id
+        text = update.message.text or update.message.caption
+    elif update.channel_post:
+        chat_id = update.channel_post.chat_id
+        text = update.channel_post.text or update.channel_post.caption
+
+    logger.info(f"Messaggio da chat_id={chat_id} testo={text}")
 
     if chat_id == SOURCE_CHANNEL_ID and text and "rating" in text.lower():
         try:
-            await bot.forward_message(
-                chat_id=DEST_CHANNEL_ID,
-                from_chat_id=chat_id,
-                message_id=message.message_id
-            )
-            logger.info("Messaggio inoltrato")
+            await context.bot.forward_message(chat_id=DEST_CHANNEL_ID, from_chat_id=SOURCE_CHANNEL_ID, message_id=update.channel_post.message_id)
+            logger.info(f"Messaggio inoltrato al canale {DEST_CHANNEL_ID}")
         except Exception as e:
-            logger.error(f"Errore inoltro: {e}")
+            logger.error(f"Errore durante inoltro: {e}")
     else:
-        logger.info("Messaggio ignorato")
+        logger.info("Messaggio ignorato (non contiene 'rating' o proviene da altra chat)")
 
+# Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bot attivo!")
+    await update.message.reply_text("Bot avviato!")
 
+# Healthcheck endpoint (ping da UptimeRobot)
+async def healthcheck(request):
+    return web.Response(text="Bot online!", status=200)
+
+# Webhook handler
+async def handle(request):
+    try:
+        data = await request.json()
+        logger.info(f"[Webhook ricevuto] {data}")
+
+        update = Update.de_json(data, bot)
+        await application.initialize()  # Necessario per usare update_queue
+        await application.update_queue.put(update)
+        return web.Response()
+    except Exception as e:
+        logger.error(f"Errore nella gestione webhook: {e}")
+        return web.Response(status=500)
+
+# Startup webhook setup
 async def on_startup(app):
-    await application.initialize()  # ⚠️ IMPORTANTE!
     await bot.set_webhook(WEBHOOK_URL)
     logger.info(f"Webhook impostato a {WEBHOOK_URL}")
 
+# Shutdown cleanup
 async def on_shutdown(app):
     await bot.delete_webhook()
     logger.info("Webhook eliminato")
 
-async def handle(request):
-    try:
-        data = await request.json()
-        update = Update.de_json(data, bot)
-        await application.update_queue.put(update)
-        return web.Response()
-    except Exception as e:
-        logger.error(f"Errore nel webhook handler: {e}")
-        return web.Response(status=500)
-
-# Handlers
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
-
-# Web server
-app = web.Application()
-app.router.add_post(WEBHOOK_PATH, handle)
-app.on_startup.append(on_startup)
-app.on_cleanup.append(on_shutdown)
-
+# Main app
 if __name__ == "__main__":
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
+
+    app = web.Application()
+    app.router.add_post(WEBHOOK_PATH, handle)
+    app.router.add_get("/", healthcheck)  # Per UptimeRobot
+
+    app.on_startup.append(lambda app: on_startup(application))
+    app.on_cleanup.append(lambda app: on_shutdown(application))
+
+    logger.info("Avvio bot con webhook")
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
