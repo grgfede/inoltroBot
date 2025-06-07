@@ -15,12 +15,22 @@ SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))  # canale da cui leggere
 DEST_CHANNEL_ID = int(os.getenv("DEST_CHANNEL_ID"))      # canale dove inoltrare
 
 async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Usare channel_post per messaggi canale
-    post = update.channel_post
-    if post and post.chat_id == SOURCE_CHANNEL_ID:
-        text = post.text or post.caption or ""
-        logger.info(f"Messaggio ricevuto da canale_id={post.chat_id} testo={text}")
+    logger.info(f"Update ricevuto: {update}")
 
+    text = None
+    chat_id = None
+
+    # Gestisce messaggi da chat o da canale
+    if update.message:
+        chat_id = update.message.chat_id
+        text = update.message.text or update.message.caption
+    elif update.channel_post:
+        chat_id = update.channel_post.chat_id
+        text = update.channel_post.text or update.channel_post.caption
+
+    logger.info(f"Messaggio da chat_id={chat_id} testo={text}")
+
+    if chat_id == SOURCE_CHANNEL_ID and text:
         if "rating" in text.lower():
             try:
                 await context.bot.send_message(chat_id=DEST_CHANNEL_ID, text=text)
@@ -30,7 +40,7 @@ async def forward_if_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             logger.info("Messaggio non contiene 'rating', nessun inoltro")
     else:
-        logger.info(f"Messaggio non da canale {SOURCE_CHANNEL_ID}, ignorato")
+        logger.info(f"Messaggio da chat_id diverso da {SOURCE_CHANNEL_ID} o testo mancante, ignorato")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info("Comando /start ricevuto")
@@ -60,23 +70,18 @@ async def handle(request):
         return web.Response(status=500)
 
 if __name__ == "__main__":
-    # Crea bot e application
     bot = Bot(token=TOKEN)
     application = ApplicationBuilder().bot(bot).build()
 
-    # Aggiungi handler:
+    # Aggiungi handler: gestisce messaggi di testo sia da chat che da canale (channel_post)
     application.add_handler(CommandHandler("start", start))
-    # Nota: usa filters.Chat e filters.ALL perché il messaggio vero arriva come channel_post
-    application.add_handler(MessageHandler(filters.ALL & filters.Chat(chat_id=SOURCE_CHANNEL_ID), forward_if_rating))
+    application.add_handler(MessageHandler(filters.ALL, forward_if_rating))
 
-    # Server aiohttp per ricevere webhook
     app = web.Application()
     app.router.add_post(WEBHOOK_PATH, handle)
 
-    # Eventi startup/shutdown webhook
     app.on_startup.append(lambda app: on_startup(application))
     app.on_cleanup.append(lambda app: on_shutdown(application))
 
     logger.info("Avvio bot con webhook")
-    # Avvia tutto
     web.run_app(app, port=int(os.getenv("PORT", 8080)))
