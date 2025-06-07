@@ -6,11 +6,11 @@ services:
       - key: BOT_TOKEN
         fromSecret: telegram-bot-token
       - key: SOURCE_CHANNEL_ID
-        value: "-1001252470250"    # metti qui l'ID del canale di origine
+        value: "<SOURCE_CHANNEL_ID>"    # metti qui l'ID del canale di origine
       - key: DEST_CHANNEL_ID
-        value: "-1002801969309"    # metti qui l'ID del canale di destinazione
+        value: "<DEST_CHANNEL_ID>"    # metti qui l'ID del canale di destinazione
       - key: WEBHOOK_URL
-        value: "https://inoltrobot.onrender.com"
+        value: "<WEBHOOK_URL>"
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python3 bot.py
