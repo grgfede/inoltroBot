@@ -8,8 +8,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 SOURCE_CHANNEL_ID = int(os.getenv("SOURCE_CHANNEL_ID"))
 TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID"))
 
+
 async def forward_filtered(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("✅ Ricevuto messaggio!")
     if update.channel_post and update.channel_post.text:
+        print("🔍 Testo:", update.channel_post.text)
         if "rating" in update.channel_post.text.lower():
             await context.bot.forward_message(
                 chat_id=TARGET_CHANNEL_ID,
