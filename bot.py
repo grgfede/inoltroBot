@@ -7,6 +7,7 @@ from telegram.ext import (
     Application, CommandHandler, ContextTypes
 )
 import asyncio
+import httpx
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +21,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.getenv("PORT", 8080))
 
 logger.info(f"WEBHOOK_URL: {WEBHOOK_URL}")
-
 
 # --- CHECK ---
 if not MAIN_BOT_TOKEN or not DATABASE_URL or not WEBHOOK_URL:
@@ -36,6 +36,10 @@ async def init_db():
     return await asyncpg.create_pool(DATABASE_URL)
 
 db_pool = None
+
+# --- HEALTH CHECK /ping ---
+async def ping(request):
+    return web.Response(text="OK")
 
 # --- COMANDI ---
 async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,6 +91,21 @@ async def handle_webhook(request):
         logger.error(f"Errore webhook: {e}")
         return web.Response(status=500)
 
+# --- ATTENDI WEBHOOK DISPONIBILE ---
+async def wait_for_webhook_ready(url, timeout=60):
+    logger.info("Attendo che il dominio Render sia disponibile...")
+    for _ in range(timeout):
+        try:
+            response = httpx.get(url)
+            if response.status_code in (200, 404):  # 404 accettabile se / non esiste ancora
+                logger.info("Dominio Render disponibile")
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+    logger.warning("Timeout nel raggiungere il dominio Render")
+    return False
+
 # --- STARTUP ---
 async def on_startup():
     global db_pool
@@ -94,8 +113,16 @@ async def on_startup():
     logger.info("Database connesso")
 
     full_webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-    await bot.set_webhook(full_webhook_url)
-    logger.info(f"Webhook registrato su Telegram: {full_webhook_url}")
+    
+    # Aspetta che Render sia live
+    await wait_for_webhook_ready(WEBHOOK_URL)
+
+    current = await bot.get_webhook_info()
+    if current.url != full_webhook_url:
+        await bot.set_webhook(full_webhook_url)
+        logger.info(f"Webhook registrato su Telegram: {full_webhook_url}")
+    else:
+        logger.info("Webhook già registrato correttamente")
 
 # --- ROUTING E HANDLER ---
 application.add_handler(CommandHandler("collegaCanali", collega_canali))
@@ -103,6 +130,7 @@ application.add_handler(CommandHandler("mostraCanali", mostra_canali))
 
 app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
+app.router.add_get("/ping", ping)
 
 logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta {PORT}")
 
@@ -119,6 +147,7 @@ if __name__ == "__main__":
                 listen="0.0.0.0",
                 port=PORT,
                 url_path=WEBHOOK_PATH.lstrip("/"),
+                web_app=app,
             )
         )
     except Exception as e:
