@@ -12,18 +12,15 @@ logger = logging.getLogger(__name__)
 
 MAIN_BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", f"/webhook/{MAIN_BOT_TOKEN}")
+
+# Porta fissa bypassando la variabile d'ambiente PORT
+PORT = 8080
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not MAIN_BOT_TOKEN or not DATABASE_URL:
     logger.error("MAIN_BOT_TOKEN o DATABASE_URL non settate!")
     exit(1)
-
-port_env = os.getenv("PORT", "8080")
-try:
-    PORT = int(port_env)
-except ValueError:
-    logger.warning(f"Variabile PORT non valida: {port_env}, uso 8080 come default")
-    PORT = 8080
 
 bot = Bot(token=MAIN_BOT_TOKEN)
 application = Application.builder().bot(bot).build()
@@ -37,7 +34,6 @@ db_pool = None
 # --- COMMANDS ---
 
 async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Uso: /collegaCanali <source_channel_id> <destination_channel_id>
     if len(context.args) != 2:
         await update.message.reply_text("Uso corretto: /collegaCanali <id_canale_sorgente> <id_canale_destinazione>")
         return
@@ -57,7 +53,9 @@ async def mostra_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update.effective_user.id
         )
     if row:
-        await update.message.reply_text(f"Hai collegato Canale Sorgente: {row['source_channel_id']} con Canale Destinazione: {row['destination_channel_id']}")
+        await update.message.reply_text(
+            f"Hai collegato Canale Sorgente: {row['source_channel_id']} con Canale Destinazione: {row['destination_channel_id']}"
+        )
     else:
         await update.message.reply_text("Non hai ancora collegato nessun canale.")
 
