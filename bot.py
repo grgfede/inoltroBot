@@ -19,6 +19,9 @@ WEBHOOK_PATH = f"/webhook/{MAIN_BOT_TOKEN}"
 DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.getenv("PORT", 8080))
 
+logger.info(f"WEBHOOK_URL: {WEBHOOK_URL}")
+
+
 # --- CHECK ---
 if not MAIN_BOT_TOKEN or not DATABASE_URL or not WEBHOOK_URL:
     logger.error("MAIN_BOT_TOKEN, DATABASE_URL o WEBHOOK_URL non settati!")
