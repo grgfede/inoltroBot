@@ -1,7 +1,6 @@
 import os
 import logging
 import asyncpg
-from aiohttp import web
 from telegram import Update, Bot
 from telegram.ext import (
     Application, CommandHandler, ContextTypes
@@ -15,8 +14,8 @@ logger = logging.getLogger(__name__)
 MAIN_BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # es: https://tuobot.onrender.com
 WEBHOOK_PATH = f"/webhook/{MAIN_BOT_TOKEN}"
-DATABASE_URL = os.getenv("DATABASE_URL")
 PORT = int(os.getenv("PORT", 8080))
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # --- CHECK ---
 if not MAIN_BOT_TOKEN or not DATABASE_URL or not WEBHOOK_URL:
@@ -35,18 +34,11 @@ db_pool = None
 
 # --- COMANDI ---
 async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Comando collegaCanali ricevuto da user_id={update.effective_user.id if update.effective_user else 'None'} con args={context.args}")
-    
-    if not update.message:
-        logger.warning("Update senza message, comando ignorato")
-        return
-
+    logger.info(f"Comando collegaCanali ricevuto da {update.effective_user.id} con args: {context.args}")
     if len(context.args) != 2:
         await update.message.reply_text("Uso corretto: /collegaCanali <id_sorgente> <id_destinazione>")
         return
-
     source, dest = context.args
-
     try:
         async with db_pool.acquire() as conn:
             await conn.execute(
@@ -56,63 +48,50 @@ async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 update.effective_user.id, int(source), int(dest)
             )
         await update.message.reply_text(f"Canali collegati: {source} -> {dest}")
-        logger.info(f"Record inserito o aggiornato per user_id={update.effective_user.id}")
+        logger.info("Dati salvati correttamente")
     except Exception as e:
-        logger.error(f"Errore DB in collega_canali: {e}")
-        await update.message.reply_text("Errore interno durante il salvataggio dei canali.")
+        logger.error(f"Errore salvataggio DB: {e}")
+        await update.message.reply_text("Errore durante il salvataggio dei dati.")
 
 async def mostra_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Comando mostraCanali ricevuto da user_id={update.effective_user.id if update.effective_user else 'None'}")
-    if not update.message:
-        logger.warning("Update senza message, comando ignorato")
-        return
-
-    try:
-        async with db_pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT source_channel_id, destination_channel_id FROM user_channels WHERE user_id = $1",
-                update.effective_user.id
-            )
-        if row:
-            await update.message.reply_text(
-                f"Hai collegato:\nCanale Sorgente: {row['source_channel_id']}\nCanale Destinazione: {row['destination_channel_id']}"
-            )
-        else:
-            await update.message.reply_text("Non hai ancora collegato nessun canale.")
-    except Exception as e:
-        logger.error(f"Errore DB in mostra_canali: {e}")
-        await update.message.reply_text("Errore interno durante il recupero dei canali.")
-
-# --- HANDLER WEBHOOK ---
-async def handle_webhook(request):
-    try:
-        data = await request.json()
-        update = Update.de_json(data, bot)
-        await application.update_queue.put(update)
-        return web.Response(text="OK")
-    except Exception as e:
-        logger.error(f"Errore webhook: {e}")
-        return web.Response(status=500)
+    logger.info(f"Comando mostraCanali ricevuto da {update.effective_user.id}")
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT source_channel_id, destination_channel_id FROM user_channels WHERE user_id = $1",
+            update.effective_user.id
+        )
+    if row:
+        await update.message.reply_text(
+            f"Hai collegato:\nCanale Sorgente: {row['source_channel_id']}\nCanale Destinazione: {row['destination_channel_id']}"
+        )
+    else:
+        await update.message.reply_text("Non hai ancora collegato nessun canale.")
 
 # --- STARTUP ---
-async def on_startup(app):
+async def on_startup():
     global db_pool
     db_pool = await init_db()
     logger.info("Database connesso")
 
-    full_webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
-    await bot.set_webhook(full_webhook_url)
-    logger.info(f"Webhook registrato su Telegram: {full_webhook_url}")
-
-# --- ROUTING E AVVIO ---
+# --- SET HANDLERS ---
 application.add_handler(CommandHandler("collegaCanali", collega_canali))
 application.add_handler(CommandHandler("mostraCanali", mostra_canali))
 
-app = web.Application()
-app.router.add_post(WEBHOOK_PATH, handle_webhook)
-app.on_startup.append(on_startup)
-
-logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta {PORT}")
-
+# --- RUN WEBHOOK ---
 if __name__ == "__main__":
-    web.run_app(app, port=PORT)
+    import asyncio
+
+    async def main():
+        await on_startup()
+        full_webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
+        logger.info(f"Imposto webhook: {full_webhook_url}")
+        await application.bot.set_webhook(full_webhook_url)
+
+        logger.info(f"Avvio bot in webhook mode sulla porta {PORT}")
+        await application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=WEBHOOK_PATH.lstrip("/"),
+        )
+
+    asyncio.run(main())
