@@ -28,7 +28,6 @@ async def init_db():
 db_pool = None
 
 # --- COMMANDS ---
-
 async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 2:
         await update.message.reply_text("Uso corretto: /collegaCanali <id_canale_sorgente> <id_canale_destinazione>")
@@ -56,7 +55,6 @@ async def mostra_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Non hai ancora collegato nessun canale.")
 
 # --- WEBHOOK HANDLER ---
-
 async def handle_webhook(request):
     try:
         data = await request.json()
@@ -68,7 +66,6 @@ async def handle_webhook(request):
         return web.Response(status=500)
 
 # --- Avvio ---
-
 async def on_startup(app):
     global db_pool
     db_pool = await init_db()
@@ -81,7 +78,7 @@ app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.on_startup.append(on_startup)
 
-logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta 8080")
+logger.info(f"Avvio bot con webhook {WEBHOOK_PATH}")
 
 if __name__ == "__main__":
-    web.run_app(app, port=8080)
+    web.run_app(app)
