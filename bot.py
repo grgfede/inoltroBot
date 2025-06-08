@@ -12,12 +12,18 @@ logger = logging.getLogger(__name__)
 
 MAIN_BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", f"/webhook/{MAIN_BOT_TOKEN}")
-PORT = int(os.getenv("PORT", "8080"))
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not MAIN_BOT_TOKEN or not DATABASE_URL:
     logger.error("MAIN_BOT_TOKEN o DATABASE_URL non settate!")
     exit(1)
+
+port_env = os.getenv("PORT", "8080")
+try:
+    PORT = int(port_env)
+except ValueError:
+    logger.warning(f"Variabile PORT non valida: {port_env}, uso 8080 come default")
+    PORT = 8080
 
 bot = Bot(token=MAIN_BOT_TOKEN)
 application = Application.builder().bot(bot).build()
