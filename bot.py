@@ -82,6 +82,7 @@ async def handle_webhook(request):
         data = await request.json()
         update = Update.de_json(data, bot)
         await application.update_queue.put(update)
+        logger.error(f"handle_webhook: OK")
         return web.Response(text="OK")
     except Exception as e:
         logger.error(f"Errore webhook: {e}")
