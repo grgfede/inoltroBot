@@ -85,7 +85,7 @@ app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.on_startup.append(on_startup)
 
-logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta {PORT}")
+logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta 8080")
 
 if __name__ == "__main__":
-    web.run_app(app, port=PORT)
+    web.run_app(app, port=8080)
