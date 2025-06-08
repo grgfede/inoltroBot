@@ -3,7 +3,9 @@ import logging
 import asyncpg
 from aiohttp import web
 from telegram import Update, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, ContextTypes
+)
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -25,64 +27,68 @@ if not MAIN_BOT_TOKEN or not DATABASE_URL or not WEBHOOK_URL:
 bot = Bot(token=MAIN_BOT_TOKEN)
 application = Application.builder().bot(bot).build()
 
-db_pool = None
-
 # --- DB INIT ---
 async def init_db():
-    pool = await asyncpg.create_pool(DATABASE_URL)
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS user_channels (
-                user_id BIGINT PRIMARY KEY,
-                source_channel_id BIGINT NOT NULL,
-                destination_channel_id BIGINT NOT NULL
-            );
-        """)
-    return pool
+    return await asyncpg.create_pool(DATABASE_URL)
 
-# --- COMMANDS ---
+db_pool = None
+
+# --- COMANDI ---
 async def collega_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Comando /collegaCanali chiamato da user {update.effective_user.id} con args {context.args}")
+    logger.info(f"Comando collegaCanali ricevuto da user_id={update.effective_user.id if update.effective_user else 'None'} con args={context.args}")
+    
+    if not update.message:
+        logger.warning("Update senza message, comando ignorato")
+        return
+
     if len(context.args) != 2:
         await update.message.reply_text("Uso corretto: /collegaCanali <id_sorgente> <id_destinazione>")
         return
+
+    source, dest = context.args
+
     try:
-        source, dest = int(context.args[0]), int(context.args[1])
-    except ValueError:
-        await update.message.reply_text("Gli ID canali devono essere numeri interi.")
-        return
-    async with db_pool.acquire() as conn:
-        await conn.execute(
-            "INSERT INTO user_channels (user_id, source_channel_id, destination_channel_id) "
-            "VALUES ($1, $2, $3) "
-            "ON CONFLICT (user_id) DO UPDATE SET "
-            "source_channel_id = EXCLUDED.source_channel_id, "
-            "destination_channel_id = EXCLUDED.destination_channel_id",
-            update.effective_user.id, source, dest
-        )
-    await update.message.reply_text(f"Canali collegati: {source} -> {dest}")
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO user_channels(user_id, source_channel_id, destination_channel_id) VALUES($1, $2, $3) "
+                "ON CONFLICT (user_id) DO UPDATE SET source_channel_id = EXCLUDED.source_channel_id, "
+                "destination_channel_id = EXCLUDED.destination_channel_id",
+                update.effective_user.id, int(source), int(dest)
+            )
+        await update.message.reply_text(f"Canali collegati: {source} -> {dest}")
+        logger.info(f"Record inserito o aggiornato per user_id={update.effective_user.id}")
+    except Exception as e:
+        logger.error(f"Errore DB in collega_canali: {e}")
+        await update.message.reply_text("Errore interno durante il salvataggio dei canali.")
 
 async def mostra_canali(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Comando /mostraCanali chiamato da user {update.effective_user.id}")
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT source_channel_id, destination_channel_id FROM user_channels WHERE user_id = $1",
-            update.effective_user.id
-        )
-    if row:
-        await update.message.reply_text(
-            f"Hai collegato:\nCanale Sorgente: {row['source_channel_id']}\nCanale Destinazione: {row['destination_channel_id']}"
-        )
-    else:
-        await update.message.reply_text("Non hai ancora collegato nessun canale.")
+    logger.info(f"Comando mostraCanali ricevuto da user_id={update.effective_user.id if update.effective_user else 'None'}")
+    if not update.message:
+        logger.warning("Update senza message, comando ignorato")
+        return
 
-# --- WEBHOOK HANDLER ---
+    try:
+        async with db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT source_channel_id, destination_channel_id FROM user_channels WHERE user_id = $1",
+                update.effective_user.id
+            )
+        if row:
+            await update.message.reply_text(
+                f"Hai collegato:\nCanale Sorgente: {row['source_channel_id']}\nCanale Destinazione: {row['destination_channel_id']}"
+            )
+        else:
+            await update.message.reply_text("Non hai ancora collegato nessun canale.")
+    except Exception as e:
+        logger.error(f"Errore DB in mostra_canali: {e}")
+        await update.message.reply_text("Errore interno durante il recupero dei canali.")
+
+# --- HANDLER WEBHOOK ---
 async def handle_webhook(request):
     try:
         data = await request.json()
         update = Update.de_json(data, bot)
         await application.update_queue.put(update)
-        logger.error(f"handle_webhook: OK")
         return web.Response(text="OK")
     except Exception as e:
         logger.error(f"Errore webhook: {e}")
