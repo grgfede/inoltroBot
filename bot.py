@@ -12,10 +12,6 @@ logger = logging.getLogger(__name__)
 
 MAIN_BOT_TOKEN = os.getenv("MAIN_BOT_TOKEN")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", f"/webhook/{MAIN_BOT_TOKEN}")
-
-# Porta fissa bypassando la variabile d'ambiente PORT
-PORT = 8080
-
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not MAIN_BOT_TOKEN or not DATABASE_URL:
