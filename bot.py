@@ -131,7 +131,7 @@ app = web.Application()
 app.router.add_post(WEBHOOK_PATH, handle_webhook)
 app.router.add_get("/ping", ping)
 
-logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta {PORT}")
+logger.info(f"Avvio bot con webhook {WEBHOOK_URL}{WEBHOOK_PATH} sulla porta {PORT}")
 
 async def main():
     await on_startup()
