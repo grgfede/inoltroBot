@@ -92,12 +92,12 @@ async def handle_webhook(request):
         return web.Response(status=500)
 
 # --- ATTENDI WEBHOOK DISPONIBILE ---
-async def wait_for_webhook_ready(url, timeout=60):
+async def wait_for_webhook_ready(url, timeout=120):
     logger.info("Attendo che il dominio Render sia disponibile...")
     for _ in range(timeout):
         try:
             response = httpx.get(url)
-            if response.status_code in (200, 404):  # 404 accettabile se / non esiste ancora
+            if response.status_code == 200:
                 logger.info("Dominio Render disponibile")
                 return True
         except Exception:
@@ -115,7 +115,7 @@ async def on_startup():
     full_webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
     
     # Aspetta che Render sia live
-    await wait_for_webhook_ready(WEBHOOK_URL)
+    await wait_for_webhook_ready(f"{WEBHOOK_URL}/ping")
 
     current = await bot.get_webhook_info()
     if current.url != full_webhook_url:
