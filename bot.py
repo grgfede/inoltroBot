@@ -114,7 +114,6 @@ async def on_startup():
 
     full_webhook_url = f"{WEBHOOK_URL}{WEBHOOK_PATH}"
     
-    # Aspetta che Render sia live
     await wait_for_webhook_ready(f"{WEBHOOK_URL}/ping")
 
     current = await bot.get_webhook_info()
@@ -134,21 +133,22 @@ app.router.add_get("/ping", ping)
 
 logger.info(f"Avvio bot con webhook {WEBHOOK_PATH} sulla porta {PORT}")
 
+async def main():
+    await on_startup()
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+
+    # Avvio l'app telegram in webhook mode senza passare web_app
+    await application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=WEBHOOK_PATH.lstrip("/"),
+    )
+
 if __name__ == "__main__":
     import nest_asyncio
     nest_asyncio.apply()
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(on_startup())
-
-    try:
-        loop.run_until_complete(
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                url_path=WEBHOOK_PATH.lstrip("/"),
-                web_app=app,
-            )
-        )
-    except Exception as e:
-        logger.error(f"Errore nell'esecuzione del webhook: {e}")
+    asyncio.run(main())
